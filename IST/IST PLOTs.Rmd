@@ -1,0 +1,429 @@
+---
+title: "data loading and plot for the ist"
+output: html_document
+---
+
+
+
+
+
+```{r}
+library(readr)
+library(ggplot2)
+
+
+# S - Beta C - uniform
+plot_data_beta_unif <- read.csv("IST_ALL_plot_data_CUNIFORM_SBeta_rho_n_baseS_withSD.csv")
+
+# S - Gamma C - Gamma
+plot_data_gamma_gamma <- read.csv("IST_ALL_plot_data_CGAMMA_SGAMMA_rho_n_baseS_withSD.csv")
+
+# S - Normal C - Beta
+plot_data_norm_beta <- read.csv("IST_ALL_plot_data_Snorm_Cbeta_rho_n_baseS_withSD.csv")
+
+
+
+```
+
+
+
+
+
+
+
+# S = Beta
+# C = Uniform
+
+## with socially desirabitlity
+
+
+
+
+```{r}
+
+
+
+
+plot_data_beta_unif$n <- factor(
+  plot_data_beta_unif$n,
+  levels = c(100, 500),
+  labels = c("n = 100", "n = 500")
+)
+
+plot_data_beta_unif$rho <- factor(
+  plot_data_beta_unif$rho,
+  levels = c(-0.5, 0, 0.5),
+  labels = c("rho == -0.5", "rho == 0", "rho == 0.5")
+)
+
+plot_data_beta_unif$p1 <- factor(
+  plot_data_beta_unif$p1,
+  levels = c(0.25, 0.5, 0.75)
+)
+
+plot_data_beta_unif$maxc <- factor(
+  plot_data_beta_unif$maxc,
+  levels = c(0.1, 0.25, 0.5)
+)
+
+plot_data_beta_unif$C_label <- factor(
+  paste0("b = ", plot_data_beta_unif$maxc)
+)
+
+# legend labels
+plot_data_beta_unif$estimator <- factor(
+  plot_data_beta_unif$estimator,
+  levels = c("dir", "dir_sd", "hat"),
+  labels = c("Direct (clean)", "Direct + SD (under)", "IST")
+)
+
+LINE_W <- 1.1
+
+for (pp in levels(plot_data_beta_unif$p1)) {
+  for (nn in levels(plot_data_beta_unif$n)) {
+
+    pd <- subset(plot_data_beta_unif, p1 == pp & n == nn)
+
+    # Bias
+    bias_plot <- ggplot(pd, aes(x = s, y = bias, color = estimator)) +
+      geom_line(linewidth = LINE_W) +
+      facet_grid(rho ~ C_label, scales = "free_y", labeller = labeller(rho = label_parsed)) +
+      theme_bw(base_size = 16) +
+      theme(
+        legend.position = "top"
+      ) +
+      labs(
+        x = "s",
+        y = "Bias",
+        color = ""
+      )
+
+    print(bias_plot)
+    ggsave(paste0("IST_Bias_CUNIFORM_SBeta_p1_", pp, "_", gsub(" = ", "", nn), "_withSD.png"),plot = bias_plot, width = 14, height = 10, dpi = 300)
+
+    # Variance
+    var_plot <- ggplot(pd, aes(x = s, y = var, color = estimator)) +
+      geom_line(linewidth = LINE_W) +
+      facet_grid(rho ~ C_label, scales = "free_y", labeller = labeller(rho = label_parsed)) +
+      theme_bw(base_size = 16) +
+      theme(
+        legend.position = "top"
+      ) +
+      labs(
+        x = "s",
+        y = "Variance",
+        color = ""
+      )
+
+    print(var_plot)
+   ggsave(paste0("IST_Variance_CUNIFORM_SBeta_p1_", pp, "_", gsub(" = ", "", nn), "_withSD.png"),plot = var_plot, width = 14, height = 10, dpi = 300)
+
+    # MSE
+    mse_plot <- ggplot(pd, aes(x = s, y = mse, color = estimator)) +
+      geom_line(linewidth = LINE_W) +
+      facet_grid(rho ~ C_label, scales = "free_y", labeller = labeller(rho = label_parsed)) +
+      theme_bw(base_size = 16) +
+      theme(
+        legend.position = "top"
+      ) +
+      labs(
+        x = "s",
+        y = "MSE",
+        color = ""
+      )
+
+    print(mse_plot)
+    ggsave(paste0("IST_MSE_CUNIFORM_SBeta_p1_", pp, "_", gsub(" = ", "", nn), "_withSD.png"),plot = mse_plot, width = 14, height = 10, dpi = 300)
+    }}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# C = Gamma
+# S = Gamma
+
+# as rate increaces the spread becomes small
+
+## sD
+
+
+
+
+```{r}
+
+# factor formatting
+plot_data_gamma_gamma$n <- factor(
+  plot_data_gamma_gamma$n,
+  levels = c(100, 500),
+  labels = c("n = 100", "n = 500")
+)
+
+plot_data_gamma_gamma$rho <- factor(
+  plot_data_gamma_gamma$rho,
+  levels = c(-0.5, 0, 0.5),
+  labels = c("rho==-0.5", "rho==0", "rho==0.5")
+)
+
+plot_data_gamma_gamma$p1 <- factor(
+  plot_data_gamma_gamma$p1,
+  levels = c(0.25, 0.5, 0.75)
+)
+
+plot_data_gamma_gamma$ratec <- factor(
+  plot_data_gamma_gamma$ratec,
+  levels = c(16, 8, 4, 2)
+)
+
+plot_data_gamma_gamma$C_label <- factor(
+  paste0("beta== ", plot_data_gamma_gamma$ratec),
+  levels = c("beta== 16", "beta== 8", "beta== 4", "beta== 2")
+)
+
+plot_data_gamma_gamma$estimator <- factor(
+  plot_data_gamma_gamma$estimator,
+  levels = c("dir", "dir_sd", "hat"),
+  labels = c("Direct (clean)", "Direct + SD (under)", "IST")
+)
+
+line_w <- 1.1
+
+for (p in levels(plot_data_gamma_gamma$p1)) {
+  for (nn in levels(plot_data_gamma_gamma$n)) {
+
+    dfp <- subset(plot_data_gamma_gamma, p1 == p & n == nn)
+
+    # BIAS
+    bias_plot <- ggplot(dfp, aes(x = s, y = bias, color = estimator)) +
+      geom_line(linewidth = line_w) +
+      facet_grid(rho ~ C_label, scales = "free_y", labeller = label_parsed) +
+      theme_bw(base_size = 16) +
+      theme(
+        panel.spacing = grid::unit(0.8, "lines"),
+        strip.text = element_text(size = 12),
+        legend.position = "top"
+      ) +
+      labs(
+        x = "s",
+        y = "Bias",
+        color = ""
+      )
+
+    print(bias_plot)
+    
+    ggsave(filename = paste0("IST_Bias_CGAMMA_SGAMMA_p", p, "_", gsub(" = ", "", nn), "_baseS_withSD.png"),plot = bias_plot, width = 18, height = 10, dpi = 300)
+
+    # VARIANCE
+    var_plot <- ggplot(dfp, aes(x = s, y = var, color = estimator)) +
+      geom_line(linewidth = line_w) +
+      facet_grid(rho ~ C_label, scales = "free_y", labeller = label_parsed) +
+      theme_bw(base_size = 16) +
+      theme(
+        panel.spacing = grid::unit(0.8, "lines"),
+        strip.text = element_text(size = 12),
+        legend.position = "top"
+      ) +
+      labs(
+        x = "s",
+        y = "Variance",
+        color = ""
+      )
+
+    print(var_plot)
+
+    ggsave(filename = paste0("IST_Variance_CGAMMA_SGAMMA_p", p, "_", gsub(" = ", "", nn), "_baseS_withSD.png"),      plot = var_plot, width = 18, height = 10, dpi = 300)
+
+    # MSE
+    mse_plot <- ggplot(dfp, aes(x = s, y = mse, color = estimator)) +
+      geom_line(linewidth = line_w) +
+      facet_grid(rho ~ C_label, scales = "free_y", labeller = label_parsed) +
+      theme_bw(base_size = 16) +
+      theme(
+        panel.spacing = grid::unit(0.8, "lines"),
+        strip.text = element_text(size = 12),
+        legend.position = "top"
+      ) +
+      labs(
+        x = "s",
+        y = "MSE",
+        color = ""
+      )
+
+    print(mse_plot)
+
+    ggsave(filename = paste0("IST_MSE_CGAMMA_SGAMMA_p", p, "_", gsub(" = ", "", nn), "_baseS_withSD.png"),plot = mse_plot, width = 18, height = 10, dpi = 300)
+  }
+}
+
+```
+
+
+
+
+
+
+
+
+
+# S = Normal ()
+# C = Beta(a,a)
+
+
+## sd
+
+
+
+
+
+
+
+```{r}
+
+
+
+plot_data_norm_beta$n <- factor(
+  plot_data_norm_beta$n,
+  levels = c(100, 500),
+  labels = c("n = 100", "n = 500")
+)
+
+plot_data_norm_beta$rho <- factor(
+  plot_data_norm_beta$rho,
+  levels = c(-0.5, 0, 0.5),
+  labels = c("rho == -0.5", "rho == 0", "rho == 0.5")
+)
+
+plot_data_norm_beta$p1 <- factor(
+  plot_data_norm_beta$p1,
+  levels = c(0.25, 0.5, 0.75)
+)
+
+plot_data_norm_beta$a <- factor(
+  plot_data_norm_beta$a,
+  levels = c(20, 10, 3, 0.5)
+)
+
+plot_data_norm_beta$C_label <- factor(
+  paste0("a = ", plot_data_norm_beta$a),
+  levels = c("a = 20", "a = 10", "a = 3", "a = 0.5")
+)
+
+# rename legend labels
+plot_data_norm_beta$estimator <- factor(
+  plot_data_norm_beta$estimator,
+  levels = c("dir", "dir_sd", "hat"),
+  labels = c("Direct (clean)", "Direct (+SD bias)", "IST")
+)
+
+lw <- 1.1
+
+for (p in levels(plot_data_norm_beta$p1)) {
+  for (nn in levels(plot_data_norm_beta$n)) {
+
+    dfp <- subset(plot_data_norm_beta, p1 == p & n == nn)
+
+    # BIAS
+    bias_plot <- ggplot(dfp, aes(x = s, y = bias, color = estimator)) +
+      geom_line(linewidth = lw) +
+      facet_grid(rho ~ C_label, scales = "free_y", labeller = labeller(rho = label_parsed)) +
+      theme_bw(base_size = 16) +
+      theme(
+        panel.spacing = grid::unit(0.8, "lines"),
+        strip.text = element_text(size = 12),
+        legend.position = "top"
+      ) +
+      labs(
+        x = "s",
+        y = "Bias",
+        color = ""
+      )
+
+    print(bias_plot)
+
+    ggsave(
+      filename = paste0("IST_Bias_Snorm_Cbeta_p", p, "_", gsub(" = ", "", nn), "_baseS_3curves.png"),
+      plot = bias_plot, width = 18, height = 10, dpi = 300
+    )
+
+    # VARIANCE
+    var_plot <- ggplot(dfp, aes(x = s, y = var, color = estimator)) +
+      geom_line(linewidth = lw) +
+      facet_grid(rho ~ C_label, scales = "free_y", labeller = labeller(rho = label_parsed)) +
+      theme_bw(base_size = 16) +
+      theme(
+        panel.spacing = grid::unit(0.8, "lines"),
+        strip.text = element_text(size = 12),
+        legend.position = "top"
+      ) +
+      labs(
+        x = "s",
+        y = "Variance",
+        color = ""
+      )
+
+    print(var_plot)
+
+    ggsave(
+      filename = paste0("IST_Variance_Snorm_Cbeta_p", p, "_", gsub(" = ", "", nn), "_baseS_3curves.png"),
+      plot = var_plot, width = 18, height = 10, dpi = 300
+    )
+
+    # MSE
+    mse_plot <- ggplot(dfp, aes(x = s, y = mse, color = estimator)) +
+      geom_line(linewidth = lw) +
+      facet_grid(rho ~ C_label, scales = "free_y", labeller = labeller(rho = label_parsed)) +
+      theme_bw(base_size = 16) +
+      theme(
+        panel.spacing = grid::unit(0.8, "lines"),
+        strip.text = element_text(size = 12),
+        legend.position = "top"
+      ) +
+      labs(
+        x = "s",
+        y = "MSE",
+        color = ""
+      )
+
+    print(mse_plot)
+
+    ggsave(
+      filename = paste0("IST_MSE_Snorm_Cbeta_p", p, "_", gsub(" = ", "", nn), "_baseS_3curves.png"),
+      plot = mse_plot, width = 18, height = 10, dpi = 300
+    )
+  }
+}
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

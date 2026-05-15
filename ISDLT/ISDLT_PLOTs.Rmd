@@ -1,0 +1,414 @@
+---
+title: "ISDLT Plots"
+author: "Stephen Agyeah"
+date: "2026-04-05"
+output: html_document
+---
+
+
+
+```{r,warning=FALSE, message=FALSE}
+library(readr)
+library(ggplot2)
+
+
+# S GAMMA C NORM
+plot_data_ISDLT_SGAMMA_CNORM <- read_csv("ISDLT_ALL_plot_data_SGAMMA_CNORM_rho_n_baseS_withSD.csv")
+
+# S BETA C UNIFORM
+plot_data_ISDLT_SBETA_CUNIFORM <-read_csv("ISDLT_ALL_plot_data_SBETA_CUNIFORM_rho_n_baseS_withSD.csv")
+
+# S CHISQ3 C NORM
+plot_data_ISDLT_SCHISQ3_CNORM <- read_csv("ISDLT_ALL_plot_data_SCHISQ3_CNORM_rho_n_baseS_withSD.csv")
+
+
+
+```
+
+
+
+
+
+
+
+# S = GAMMA
+# C1,C2 = NORMAL
+
+```{r}
+
+
+plot_data_ISDLT_SGAMMA_CNORM$n <- factor(
+  plot_data_ISDLT_SGAMMA_CNORM$n,
+  levels = c(100, 500),
+  labels = c("n = 100", "n = 500")
+)
+
+plot_data_ISDLT_SGAMMA_CNORM$rho <- factor(
+  plot_data_ISDLT_SGAMMA_CNORM$rho,
+  levels = c(-0.5, 0, 0.5),
+  labels = c("rho == -0.5", "rho == 0", "rho == 0.5")
+)
+
+plot_data_ISDLT_SGAMMA_CNORM$pA <- factor(
+  plot_data_ISDLT_SGAMMA_CNORM$pA,
+  levels = c(0.25, 0.5, 0.75)
+)
+
+plot_data_ISDLT_SGAMMA_CNORM$sdC1 <- factor(
+  plot_data_ISDLT_SGAMMA_CNORM$sdC1,
+  levels = c(0.05, 0.10, 0.5)
+)
+
+plot_data_ISDLT_SGAMMA_CNORM$sdC2 <- factor(
+  plot_data_ISDLT_SGAMMA_CNORM$sdC2,
+  levels = c(0.05, 0.25, 0.5)
+)
+
+
+plot_data_ISDLT_SGAMMA_CNORM$C_label <- factor(
+  paste0(
+    "sigma[C1]==", plot_data_ISDLT_SGAMMA_CNORM$sdC1,
+    "*','~sigma[C2]==", plot_data_ISDLT_SGAMMA_CNORM$sdC2
+  )
+)
+
+
+
+# plot_data_ISDLT_SGAMMA_CNORM$C_label <- factor( paste0( "sigma== ", plot_data_ISDLT_SGAMMA_CNORM$sdC1, ", sigma== ", plot_data_ISDLT_SGAMMA_CNORM$sdC2))
+
+# legend labels
+plot_data_ISDLT_SGAMMA_CNORM$estimator <- factor(
+  plot_data_ISDLT_SGAMMA_CNORM$estimator,
+  levels = c("dir", "dir_sd", "hat"),
+  labels = c("Direct (clean)", "Direct + SD (under)", "ISDLT")
+)
+
+LINE_W <- 1.1
+
+# labeller = labeller(rho = label_parsed)
+
+for (pp in levels(plot_data_ISDLT_SGAMMA_CNORM$pA)) {
+  for (nn in levels(plot_data_ISDLT_SGAMMA_CNORM$n)) {
+
+    pd <- subset(plot_data_ISDLT_SGAMMA_CNORM, pA == pp & n == nn)
+
+    # Bias
+    bias_plot <- ggplot(pd, aes(x = s, y = bias, color = estimator)) +
+      geom_line(linewidth = LINE_W) +
+      facet_grid(rho ~ C_label, scales = "free_y", labeller =  label_parsed) +
+      theme_bw(base_size = 16) +
+      theme(
+        legend.position = "top"
+      ) +
+      labs(
+        x = "s",
+        y = "Bias",
+        color = ""
+      )
+
+    print(bias_plot)
+    ggsave(     paste0("ISDLT_Bias_SGAMMA_CNORM_pA_", pp, "_", gsub(" = ", "", nn), "_baseS_withSD.png"),      plot = bias_plot, width = 18, height = 10, dpi = 300)
+
+    # Variance
+    var_plot <- ggplot(pd, aes(x = s, y = var, color = estimator)) +
+      geom_line(linewidth = LINE_W) +
+      facet_grid(rho ~ C_label, scales = "free_y", labeller =  label_parsed) +
+      theme_bw(base_size = 16) +
+      theme(
+        legend.position = "top"
+      ) +
+      labs(
+        x = "s",
+        y = "Variance",
+        color = ""
+      )
+
+    print(var_plot)
+    ggsave(     paste0("ISDLT_Variance_SGAMMA_CNORM_pA_", pp, "_", gsub(" = ", "", nn), "_baseS_withSD.png"),plot = var_plot, width = 18, height = 10, dpi = 300    )
+
+    # MSE
+    mse_plot <- ggplot(pd, aes(x = s, y = mse, color = estimator)) +
+      geom_line(linewidth = LINE_W) +
+      facet_grid(rho ~ C_label, scales = "free_y", labeller =  label_parsed) +
+      theme_bw(base_size = 16) +
+      theme(
+        legend.position = "top"
+      ) +
+      labs(
+        x = "s",
+        y = "MSE",
+        color = ""
+      )
+
+    print(mse_plot)
+ggsave(     paste0("ISDLT_MSE_SGAMMA_CNORM_pA_", pp, "_", gsub(" = ", "", nn), "_baseS_withSD.png"), plot = mse_plot, width = 18, height = 10, dpi = 300)
+  }
+}
+
+
+
+```
+
+
+
+
+# S = beta
+# C = Uniform
+
+```{r}
+
+
+
+plot_data_ISDLT_SBETA_CUNIFORM$n <- factor(
+  plot_data_ISDLT_SBETA_CUNIFORM$n,
+  levels = c(100, 500),
+  labels = c("n = 100", "n = 500")
+)
+
+plot_data_ISDLT_SBETA_CUNIFORM$rho <- factor(
+  plot_data_ISDLT_SBETA_CUNIFORM$rho,
+  levels = c(-0.5, 0, 0.5),
+  labels = c("rho == -0.5", "rho == 0", "rho == 0.5")
+)
+
+plot_data_ISDLT_SBETA_CUNIFORM$p1 <- factor(
+  plot_data_ISDLT_SBETA_CUNIFORM$p1,
+  levels = c(0.25, 0.5, 0.75)
+)
+
+plot_data_ISDLT_SBETA_CUNIFORM$maxc1 <- factor(
+  plot_data_ISDLT_SBETA_CUNIFORM$maxc1,
+  levels = c(0.1, 0.25, 0.5)
+)
+
+plot_data_ISDLT_SBETA_CUNIFORM$maxc2 <- factor(
+  plot_data_ISDLT_SBETA_CUNIFORM$maxc2,
+  levels = c(0.1, 0.25, 0.5)
+)
+
+plot_data_ISDLT_SBETA_CUNIFORM$C_label <- factor(
+  paste0(
+    "C1 = ", plot_data_ISDLT_SBETA_CUNIFORM$maxc1,
+    ", C2 = ", plot_data_ISDLT_SBETA_CUNIFORM$maxc2
+  )
+)
+
+plot_data_ISDLT_SBETA_CUNIFORM$estimator <- factor(
+  plot_data_ISDLT_SBETA_CUNIFORM$estimator,
+  levels = c("dir", "dir_sd", "hat"),
+  labels = c("Direct (clean)", "Direct + SD (under)", "ISDLT")
+)
+
+LINE_W <- 1.1
+
+for (pp in unique(plot_data_ISDLT_SBETA_CUNIFORM$p1)) {
+  for (nn in levels(plot_data_ISDLT_SBETA_CUNIFORM$n)) {
+
+    pd <- subset(plot_data_ISDLT_SBETA_CUNIFORM, p1 == pp & n == nn)
+
+    # Bias
+    bias_plot <- ggplot(pd, aes(x = s, y = bias, color = estimator)) +
+      geom_line(linewidth = LINE_W) +
+      facet_grid(rho ~ C_label, scales = "free_y", labeller = labeller(rho = label_parsed)) +
+      theme_bw(base_size = 16) +
+      theme(
+        legend.position = "top",
+        axis.text.x = element_text(angle = 75, vjust = 0.5, hjust = 1)
+      ) +
+      labs(
+        x = "s",
+        y = "Bias",
+        color = ""
+      )
+
+    print(bias_plot)
+    ggsave(
+      paste0("ISDLT_Bias_SBETA_CUNIFORM_p1_", pp, "_", gsub(" = ", "", nn), "_baseS_withSD.png"),
+      plot = bias_plot, width = 18, height = 10, dpi = 300
+    )
+
+    # Variance
+    var_plot <- ggplot(pd, aes(x = s, y = var, color = estimator)) +
+      geom_line(linewidth = LINE_W) +
+      facet_grid(rho ~ C_label, scales = "free_y", labeller = labeller(rho = label_parsed)) +
+      theme_bw(base_size = 16) +
+      theme(
+        legend.position = "top",
+        axis.text.x = element_text(angle = 75, vjust = 0.5, hjust = 1)
+      ) +
+      labs(
+        x = "s",
+        y = "Variance",
+        color = ""
+      )
+
+    print(var_plot)
+    ggsave(
+      paste0("ISDLT_Variance_SBETA_CUNIFORM_p1_", pp, "_", gsub(" = ", "", nn), "_baseS_withSD.png"),
+      plot = var_plot, width = 18, height = 10, dpi = 300
+    )
+
+    # MSE
+    mse_plot <- ggplot(pd, aes(x = s, y = mse, color = estimator)) +
+      geom_line(linewidth = LINE_W) +
+      facet_grid(rho ~ C_label, scales = "free_y", labeller = labeller(rho = label_parsed)) +
+      theme_bw(base_size = 16) +
+      theme(
+        legend.position = "top",
+        axis.text.x = element_text(angle = 75, vjust = 0.5, hjust = 1)
+      ) +
+      labs(
+        x = "s",
+        y = "MSE",
+        color = ""
+      )
+
+    print(mse_plot)
+    ggsave(
+      paste0("ISDLT_MSE_SBETA_CUNIFORM_p1_", pp, "_", gsub(" = ", "", nn), "_baseS_withSD.png"),
+      plot = mse_plot, width = 18, height = 10, dpi = 300
+    )
+  }
+}
+
+
+
+
+```
+
+
+
+# S = CHI SQUARE DF 3
+# C1, C2 = NORM
+
+```{r}
+
+
+
+
+plot_data_ISDLT_SCHISQ3_CNORM$n <- factor(
+  plot_data_ISDLT_SCHISQ3_CNORM$n,
+  levels = c(100, 500),
+  labels = c("n = 100", "n = 500")
+)
+
+plot_data_ISDLT_SCHISQ3_CNORM$rho <- factor(
+  plot_data_ISDLT_SCHISQ3_CNORM$rho,
+  levels = c(-0.5, 0, 0.5),
+  labels = c("rho == -0.5", "rho == 0", "rho == 0.5")
+)
+
+plot_data_ISDLT_SCHISQ3_CNORM$p1 <- factor(
+  plot_data_ISDLT_SCHISQ3_CNORM$p1,
+  levels = c(0.25, 0.5, 0.75)
+)
+
+plot_data_ISDLT_SCHISQ3_CNORM$sdC1 <- factor(
+  plot_data_ISDLT_SCHISQ3_CNORM$sdC1,
+  levels = c(0.05, 0.10, 0.25)
+)
+
+plot_data_ISDLT_SCHISQ3_CNORM$sdC2 <- factor(
+  plot_data_ISDLT_SCHISQ3_CNORM$sdC2,
+  levels = c(0.10, 0.25, 0.50)
+)
+
+
+plot_data_ISDLT_SCHISQ3_CNORM$C_label <- factor(
+  paste0(
+    "sigma[C1]==", plot_data_ISDLT_SCHISQ3_CNORM$sdC1,
+    "*','~sigma[C2]==", plot_data_ISDLT_SCHISQ3_CNORM$sdC2
+  )
+)
+
+
+
+plot_data_ISDLT_SCHISQ3_CNORM$estimator <- factor(
+  plot_data_ISDLT_SCHISQ3_CNORM$estimator,
+  levels = c("dir", "dir_sd", "hat"),
+  labels = c("Direct (clean)", "Direct + SD (under)", "ISDLT")
+)
+
+LINE_W <- 1.1
+
+# labeller = labeller(rho = label_parsed)
+
+
+for (pp in levels(plot_data_ISDLT_SCHISQ3_CNORM$p1)) {
+  for (nn in levels(plot_data_ISDLT_SCHISQ3_CNORM$n)) {
+
+    pd <- subset(plot_data_ISDLT_SCHISQ3_CNORM, p1 == pp & n == nn)
+
+    # Bias
+    bias_plot <- ggplot(pd, aes(x = s, y = bias, color = estimator)) +
+      geom_line(linewidth = LINE_W) +
+      facet_grid(rho ~ C_label, scales = "free_y", labeller = label_parsed) +
+      theme_bw(base_size = 16) +
+      theme(
+        legend.position = "top",
+        axis.text.x = element_text(angle = 75, vjust = 0.5, hjust = 1)
+      ) +
+      labs(
+        x = "s",
+        y = "Bias",
+        color = ""
+      )
+
+    print(bias_plot)
+    ggsave(
+      paste0("ISDLT_Bias_SCHISQ3_CNORM_p1_", pp, "_", gsub(" = ", "", nn), "_baseS_withSD.png"),
+      plot = bias_plot, width = 18, height = 10, dpi = 300
+    )
+
+    # Variance
+    var_plot <- ggplot(pd, aes(x = s, y = var, color = estimator)) +
+      geom_line(linewidth = LINE_W) +
+      facet_grid(rho ~ C_label, scales = "free_y", labeller = label_parsed) +
+      theme_bw(base_size = 16) +
+      theme(
+        legend.position = "top",
+        axis.text.x = element_text(angle = 75, vjust = 0.5, hjust = 1)
+      ) +
+      labs(
+        x = "s",
+        y = "Variance",
+        color = ""
+      )
+
+    print(var_plot)
+    ggsave(
+      paste0("ISDLT_Variance_SCHISQ3_CNORM_p1_", pp, "_", gsub(" = ", "", nn), "_baseS_withSD.png"),
+      plot = var_plot, width = 18, height = 10, dpi = 300
+    )
+
+    # MSE
+    mse_plot <- ggplot(pd, aes(x = s, y = mse, color = estimator)) +
+      geom_line(linewidth = LINE_W) +
+      facet_grid(rho ~ C_label, scales = "free_y", labeller = label_parsed) +
+      theme_bw(base_size = 16) +
+      theme(
+        legend.position = "top",
+        axis.text.x = element_text(angle = 75, vjust = 0.5, hjust = 1)
+      ) +
+      labs(
+        x = "s",
+        y = "MSE",
+        color = ""
+      )
+
+    print(mse_plot)
+    ggsave(
+      paste0("ISDLT_MSE_SCHISQ3_CNORM_p1_", pp, "_", gsub(" = ", "", nn), "_baseS_withSD.png"),
+      plot = mse_plot, width = 18, height = 10, dpi = 300
+    )
+  }
+}
+
+
+
+
+```
+
+
+
+

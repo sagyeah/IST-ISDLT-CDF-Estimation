@@ -1,0 +1,155 @@
+---
+title: "Quantile Estimation"
+output: html_document
+---
+
+
+
+
+
+# S = Beta
+# C = Uniform
+
+
+```{r}
+
+library(MASS)
+
+# long-list proportions
+p1_values <- c(0.25, 0.50, 0.75)
+
+# quantile levels
+tau_values <- c(0.25, 0.50, 0.75)
+
+# simulation settings
+m <- 500
+ns <- c(100, 500)
+Max <- c(0.1, 0.25, 0.5)
+rho_values <- c(-0.5, 0, 0.5)
+
+# grid for quantile estimation
+s_grid <- seq(0, 1, by = 0.001)
+
+# function to extract quantile from estimated CDF
+quantile_from_cdf <- function(s_grid, Fhat, tau) {
+  idx <- which(Fhat >= tau)[1]
+  if (is.na(idx)) return(NA_real_)
+  return(s_grid[idx])
+}
+
+ALL_QUANT_RESULTS <- data.frame()
+
+for (n in ns) {
+  for (p1 in p1_values) {
+    for (maxc in Max) {
+      for (rho in rho_values) {
+        
+        # store estimated quantiles for each simulation
+        q_direct_store <- matrix(NA, nrow = m, ncol = length(tau_values))
+        q_ist_store    <- matrix(NA, nrow = m, ncol = length(tau_values))
+        
+        for (i in 1:m) {
+          
+          # generate correlated normals
+          Z <- mvrnorm(
+            n = n,
+            mu = c(0, 0),
+            Sigma = matrix(c(1, rho, rho, 1), 2, 2)
+          )
+          
+          # convert to uniforms
+          U1 <- pnorm(Z[, 1])
+          U2 <- pnorm(Z[, 2])
+          
+          # generate S and C
+          S <- qbeta(U1, shape1 = 2, shape2 = 5)
+          C <- maxc * U2
+          
+          # generate list assignment and observed response
+          L <- rbinom(n, 1, p1)
+          Y <- ifelse(L == 0, C, S + C)
+          
+          dat  <- data.frame(S, C, L, Y)
+          dat0 <- subset(dat, L == 0)
+          dat1 <- subset(dat, L == 1)
+          
+          # avoid empty groups
+          if (nrow(dat0) == 0 || nrow(dat1) == 0) next
+          
+          # Direct empirical CDF of S
+          F_direct <- sapply(s_grid, function(s) {
+            mean(S <= s)
+          })
+          
+          # empirical CDFs for short and long lists
+          F1_hat <- function(y) mean(dat1$Y <= y)
+          F0_hat <- function(y) mean(dat0$Y <= y)
+          
+          # IST estimated CDF of S
+          F_ist <- sapply(s_grid, function(s) {
+            inner_vals <- sapply(dat0$Y, function(Yi) {
+              F1_hat(s + Yi) - F0_hat(Yi)
+            })
+            min(max(mean(inner_vals) + 0.5, 0), 1)
+          })
+          
+          # estimated quantiles from Direct and IST CDFs
+          for (t in seq_along(tau_values)) {
+            tau <- tau_values[t]
+            
+            q_direct_store[i, t] <- quantile_from_cdf(s_grid, F_direct, tau)
+            q_ist_store[i, t]    <- quantile_from_cdf(s_grid, F_ist, tau)
+          }
+        }
+        
+        # true quantiles of S ~ Beta(2,5)
+        true_q <- qbeta(tau_values, shape1 = 2, shape2 = 5)
+        TRUE_Q <- matrix(true_q, nrow = m, ncol = length(tau_values), byrow = TRUE)
+        
+        # helper function for summaries
+        summarize_quantiles <- function(q_store, estimator_name) {
+          data.frame(
+            n = n,
+            p1 = p1,
+            maxc = maxc,
+            rho = rho,
+            estimator = estimator_name,
+            tau = tau_values,
+            true_q = round(true_q, 6),
+            avg_q_hat = round(colMeans(q_store, na.rm = TRUE), 6),
+            bias_q_hat = round(colMeans(q_store - TRUE_Q, na.rm = TRUE), 6),
+            mse_q_hat = round(colMeans((q_store - TRUE_Q)^2, na.rm = TRUE), 6),
+            var_q_hat = round(apply(q_store, 2, var, na.rm = TRUE), 6)
+          )
+        }
+        
+        results_quant <- rbind(
+          summarize_quantiles(q_direct_store, "Direct"),
+          summarize_quantiles(q_ist_store, "IST")
+        )
+        
+        ALL_QUANT_RESULTS <- rbind(ALL_QUANT_RESULTS, results_quant)
+      }
+    }
+  }
+}
+
+# show all results
+print(ALL_QUANT_RESULTS)
+
+# save results
+write.csv(ALL_QUANT_RESULTS, "quantile_direct_ist_bias_variance_mse.csv", row.names = FALSE)
+
+
+
+
+```
+
+
+
+
+
+
+
+
+

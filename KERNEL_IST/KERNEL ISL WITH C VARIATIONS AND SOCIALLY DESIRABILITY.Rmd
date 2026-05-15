@@ -1,0 +1,975 @@
+---
+title: ''
+output: html_document
+---
+
+
+
+
+
+
+
+
+
+
+
+
+# kernel smoothing
+
+
+# S = Beta
+# C = Uniform
+
+
+
+
+```{r}
+library(ggplot2)
+library(MASS)
+
+# values of p1 to test
+p_values <- c(0.25, 0.5, 0.75)
+
+# no of monte carlo samples
+m <- 500
+
+# sample sizes
+ns <- c(100, 500)
+
+s_grid <- seq(0, 1, 0.05)
+k <- length(s_grid)
+
+Max <- c(0.1, 0.25, 0.5)
+
+# rho levels
+rho_values <- c(-0.5, 0, 0.5)
+
+ALL_RESULTS <- data.frame()
+
+make_kernel_cdf <- function(x, h) {
+  force(x); force(h)
+  function(y) mean(pnorm((y - x) / h))
+}
+
+for (n in ns) {
+  for (p1 in p_values) {
+    for (maxc in Max) {
+      for (rho in rho_values) {
+        F_hat_store    <- matrix(NA, nrow = m, ncol = k)
+        F_dir_store    <- matrix(NA, nrow = m, ncol = k)   # clean direct
+        F_dir_sd_store <- matrix(NA, nrow = m, ncol = k)   # direct + under-reporting
+        
+        for (i in 1:m) {
+          
+          # correlated uniforms keep S Beta and C Uniform
+          Z <- mvrnorm(n = n, mu = c(0, 0),
+                       Sigma = matrix(c(1, rho, rho, 1), 2, 2))
+          U1 <- pnorm(Z[,1])
+          U2 <- pnorm(Z[,2])
+          
+          S <- qbeta(U1, 2, 5)
+          C <- maxc * U2
+          
+          L <- rbinom(n, 1, p1)
+          Y <- ifelse(L == 0, C, S + C)
+          
+          dat  <- data.frame(S, C, L, Y)
+          dat0 <- subset(dat, L == 0)
+          dat1 <- subset(dat, L == 1)
+          
+          # direct CDF (clean)
+          F_S_dir <- sapply(s_grid, function(s) mean(S <= s))
+          
+          # direct CDF + social desirability (UNDER-reporting)
+          # under-reporting reported S smaller
+          shift_amt <- 0.25 * sd(S)
+          F_S_dir_sd <- pmin(pmax(F_S_dir + shift_amt, 0), 1)
+          
+          # bandwidths
+          h1 <- bw.SJ(dat1$Y)   # for long-list Y
+          h0 <- bw.SJ(dat0$Y)   # for short-list Y
+          
+          # kernel-smoothed CDFs using the formula
+          F1_hat <- make_kernel_cdf(dat1$Y, h1)
+          F0_hat <- make_kernel_cdf(dat0$Y, h0)
+
+          # IST estimator
+          F_S_hat <- sapply(s_grid, function(s) {
+            inner_vals <- sapply(dat0$Y, function(Yi) {
+              F1_hat(s + Yi) - F0_hat(Yi)
+            })
+            min(max(mean(inner_vals) + 0.5, 0), 1)
+          })
+          
+          F_dir_store[i, ]    <- F_S_dir
+          F_dir_sd_store[i, ] <- F_S_dir_sd
+          F_hat_store[i, ]    <- F_S_hat
+        }
+        
+        # TRUE CDF for S
+        F_true <- pbeta(s_grid, 2, 5)
+        TRUE_mat <- matrix(F_true, m, k, byrow = TRUE)
+        
+        avg_F_dir    <- colMeans(F_dir_store)
+        avg_F_dir_sd <- colMeans(F_dir_sd_store)
+        avg_F_hat    <- colMeans(F_hat_store)
+        
+        bias_dir    <- colMeans(F_dir_store - TRUE_mat)
+        bias_dir_sd <- colMeans(F_dir_sd_store - TRUE_mat)
+        bias_hat    <- colMeans(F_hat_store - TRUE_mat)
+        
+        mse_dir    <- colMeans((F_dir_store - TRUE_mat)^2)
+        mse_dir_sd <- colMeans((F_dir_sd_store - TRUE_mat)^2)
+        mse_hat    <- colMeans((F_hat_store - TRUE_mat)^2)
+        
+        var_dir    <- apply(F_dir_store, 2, var)
+        var_dir_sd <- apply(F_dir_sd_store, 2, var)
+        var_hat    <- apply(F_hat_store, 2, var)
+        
+        results <- data.frame(
+          n = n,
+          p1 = p1,
+          maxc = maxc,
+          rho = rho,
+          s = s_grid,
+          
+          F_true = round(F_true, 6),
+          
+          avg_F_dir    = round(avg_F_dir, 6),
+          avg_F_dir_sd = round(avg_F_dir_sd, 6),
+          avg_F_hat    = round(avg_F_hat, 6),
+          
+          bias_dir    = round(bias_dir, 6),
+          bias_dir_sd = round(bias_dir_sd, 6),
+          bias_hat    = round(bias_hat, 6),
+          
+          mse_dir    = round(mse_dir, 6),
+          mse_dir_sd = round(mse_dir_sd, 6),
+          mse_hat    = round(mse_hat, 6),
+          
+          var_dir    = round(var_dir, 6),
+          var_dir_sd = round(var_dir_sd, 6),
+          var_hat    = round(var_hat, 6)
+        )
+        
+        write.csv(results,
+                  paste0("ISTKernel_n", n,
+                         "_p", p1, "_max", maxc,
+                         "_rho", rho, "_baseS.csv"),
+                  row.names = FALSE
+        )
+        
+        ALL_RESULTS <- rbind(ALL_RESULTS, results)
+      }
+    }
+  }
+}
+
+# plot data includes 3 estimators: dir, dir_sd, hat
+plot_data_beta_unif <- rbind(
+  data.frame(ALL_RESULTS, estimator = "dir",
+             bias = ALL_RESULTS$bias_dir,
+             mse  = ALL_RESULTS$mse_dir,
+             var  = ALL_RESULTS$var_dir),
+  
+  data.frame(ALL_RESULTS, estimator = "dir_sd",
+             bias = ALL_RESULTS$bias_dir_sd,
+             mse  = ALL_RESULTS$mse_dir_sd,
+             var  = ALL_RESULTS$var_dir_sd),
+  
+  data.frame(ALL_RESULTS, estimator = "hat",
+             bias = ALL_RESULTS$bias_hat,
+             mse  = ALL_RESULTS$mse_hat,
+             var  = ALL_RESULTS$var_hat)
+)
+
+ write.csv(plot_data_beta_unif,
+           "ISTKernel_ALL_plot_data_CUNIFORM_SBeta_rho_n_baseS_withSD.csv",
+           row.names = FALSE)
+
+```
+
+
+
+MSE results with intra-cluster correlation of 0.5 and total sample size of 200.  MSE results for two discrete kernel estimators with intra-cluster correlation of 0.5 and total sample size of 200.
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+
+plot_data_beta_unif$n <- factor(
+  plot_data_beta_unif$n,
+  levels = c(100, 500)
+)
+
+plot_data_beta_unif$p1 <- factor(
+  plot_data_beta_unif$p1,
+  levels = c(0.25, 0.5, 0.75)
+)
+
+plot_data_beta_unif$rho <- factor(
+  plot_data_beta_unif$rho,
+  levels = c(-0.5, 0, 0.5),
+  labels = c("-0.5", "0", "0.5")
+)
+
+plot_data_beta_unif$maxc <- factor(
+  plot_data_beta_unif$maxc,
+  levels = c(0.1, 0.25, 0.5)
+)
+
+# rename legend labels
+plot_data_beta_unif$estimator <- factor(
+  plot_data_beta_unif$estimator,
+  levels = c("dir", "dir_sd", "hat"),
+  labels = c("Direct (clean)", "Direct + SD (under)", "IST kernel")
+)
+
+LINE_W <- 1.1
+
+for (pp in levels(plot_data_beta_unif$p1)) {
+
+  pd <- subset(plot_data_beta_unif, p1 == pp)
+
+  # Bias
+  bias_plot <- ggplot(pd, aes(x = s, y = bias, color = estimator)) +
+    geom_line(linewidth = LINE_W) +
+    facet_grid(n + rho ~ maxc, scales = "free_y") +
+    theme_bw(base_size = 16) +
+    theme(
+      legend.position = "top",
+      plot.caption = element_text(hjust = 0.5, size = 13)
+    ) +
+    labs(
+      x = "s",
+      y = "Bias",
+      color = "",
+      caption = paste0(
+        "Bias results for the direct estimator, direct + SD estimator, and kernel IST estimator ",
+        "with S ~ Beta(2,5), C ~ Uniform(0, maxc), and p1 = ", pp, "."
+      )
+    )
+
+  print(bias_plot)
+  ggsave(
+    paste0("IST_KERNEL_Bias_CUNIFORM_SBeta_p1_", pp, "_rho_n.png"),
+    plot = bias_plot, width = 14, height = 8, dpi = 300
+  )
+
+  # Variance
+  var_plot <- ggplot(pd, aes(x = s, y = var, color = estimator)) +
+    geom_line(linewidth = LINE_W) +
+    facet_grid(n + rho ~ maxc, scales = "free_y") +
+    theme_bw(base_size = 16) +
+    theme(
+      legend.position = "top",
+      plot.caption = element_text(hjust = 0.5, size = 13)
+    ) +
+    labs(
+      x = "s",
+      y = "Variance",
+      color = "",
+      caption = paste0(
+        "Variance results for the direct estimator, direct + SD estimator, and kernel IST estimator ",
+        "with S ~ Beta(2,5), C ~ Uniform(0, maxc), and p1 = ", pp, "."
+      )
+    )
+
+  print(var_plot)
+  ggsave(
+    paste0("IST_KERNEL_Variance_CUNIFORM_SBeta_p1_", pp, "_rho_n.png"),
+    plot = var_plot, width = 14, height = 8, dpi = 300
+  )
+
+  # MSE
+  mse_plot <- ggplot(pd, aes(x = s, y = mse, color = estimator)) +
+    geom_line(linewidth = LINE_W) +
+    facet_grid(n + rho ~ maxc, scales = "free_y") +
+    theme_bw(base_size = 16) +
+    theme(
+      legend.position = "top",
+      plot.caption = element_text(hjust = 0.5, size = 13)
+    ) +
+    labs(
+      x = "s",
+      y = "MSE",
+      color = "",
+      caption = paste0(
+        "Mean squared error results for the direct estimator, direct + SD estimator, and kernel IST estimator ",
+        "with S ~ Beta(2,5), C ~ Uniform(0, maxc), and p1 = ", pp, "."
+      )
+    )
+
+  print(mse_plot)
+  ggsave(
+    paste0("IST_KERNEL_MSE_CUNIFORM_SBeta_p1_", pp, "_rho_n.png"),
+    plot = mse_plot, width = 14, height = 8, dpi = 300
+  )
+}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# C = Gamma
+# S = Gamma
+
+
+
+```{r}
+
+
+
+# values of p1 to test
+p_values <- c(0.25, 0.5, 0.75)
+
+# no of monte carlo samples
+m <- 500
+
+# sample sizes
+ns <- c(100, 500)
+
+# s values where we evaluate the CDF
+s_grid <- seq(0, 4, 0.1)
+k <- length(s_grid)
+
+# C rates (bigger rate -> smaller spread)
+RateC <- c(16, 8, 4, 2)
+
+# rho levels
+rho_values <- c(-0.5, 0, 0.5)
+
+ALL_RESULTS <- data.frame()
+
+make_kernel_cdf <- function(x, h) {
+  force(x); force(h)
+  function(y) mean(pnorm((y - x) / h))
+}
+
+for (n in ns) {
+  for (p1 in p_values) {
+    for (ratec in RateC) {
+      for (rho in rho_values) {
+        F_hat_store    <- matrix(NA, nrow = m, ncol = k)
+        F_dir_store    <- matrix(NA, nrow = m, ncol = k)   # clean direct
+        F_dir_sd_store <- matrix(NA, nrow = m, ncol = k)   # direct + under-reporting
+        
+        for (i in 1:m) {
+          
+          # correlated uniforms keep S Gamma and C Gamma
+          Z <- mvrnorm(n = n, mu = c(0, 0),
+                       Sigma = matrix(c(1, rho, rho, 1), 2, 2))
+          U1 <- pnorm(Z[,1])
+          U2 <- pnorm(Z[,2])
+          
+          S <- qgamma(U1, shape = 3, rate = 2)
+          C <- qgamma(U2, shape = 2, rate = ratec)
+          
+          L <- rbinom(n, 1, p1)
+          Y <- ifelse(L == 0, C, S + C)
+          
+          dat  <- data.frame(S, C, L, Y)
+          dat0 <- subset(dat, L == 0)
+          dat1 <- subset(dat, L == 1)
+          
+          # direct CDF (clean)
+          F_S_dir <- sapply(s_grid, function(s) mean(S <= s))
+          
+          # direct CDF + social desirability (UNDER-reporting)
+          # under-reporting reported S smaller
+          shift_amt <- 0.10 * sd(S)
+          F_S_dir_sd <- pmin(pmax(F_S_dir + shift_amt, 0), 1)
+          
+          # bandwidths
+          h1 <- bw.SJ(dat1$Y)   # for long-list Y
+          h0 <- bw.SJ(dat0$Y)   # for short-list Y
+          
+          # kernel-smoothed CDFs using the formula
+          F1_hat <- make_kernel_cdf(dat1$Y, h1)
+          F0_hat <- make_kernel_cdf(dat0$Y, h0)
+
+          # IST estimator
+          F_S_hat <- sapply(s_grid, function(s) {
+            inner_vals <- sapply(dat0$Y, function(Yi) {
+              F1_hat(s + Yi) - F0_hat(Yi)
+            })
+            min(max(mean(inner_vals) + 0.5, 0), 1)
+          })
+          
+          F_dir_store[i, ]    <- F_S_dir
+          F_dir_sd_store[i, ] <- F_S_dir_sd
+          F_hat_store[i, ]    <- F_S_hat
+        }
+        
+        # TRUE CDF for S
+        F_true <- pgamma(s_grid, shape = 3, rate = 2)
+        TRUE_mat <- matrix(F_true, m, k, byrow = TRUE)
+        
+        avg_F_dir    <- colMeans(F_dir_store)
+        avg_F_dir_sd <- colMeans(F_dir_sd_store)
+        avg_F_hat    <- colMeans(F_hat_store)
+        
+        bias_dir    <- colMeans(F_dir_store - TRUE_mat)
+        bias_dir_sd <- colMeans(F_dir_sd_store - TRUE_mat)
+        bias_hat    <- colMeans(F_hat_store - TRUE_mat)
+        
+        mse_dir    <- colMeans((F_dir_store - TRUE_mat)^2)
+        mse_dir_sd <- colMeans((F_dir_sd_store - TRUE_mat)^2)
+        mse_hat    <- colMeans((F_hat_store - TRUE_mat)^2)
+        
+        var_dir    <- apply(F_dir_store, 2, var)
+        var_dir_sd <- apply(F_dir_sd_store, 2, var)
+        var_hat    <- apply(F_hat_store, 2, var)
+        
+        results <- data.frame(
+          n = n,
+          p1 = p1,
+          ratec = ratec,
+          rho = rho,
+          s = s_grid,
+          
+          F_true = round(F_true, 6),
+          
+          avg_F_dir    = round(avg_F_dir, 6),
+          avg_F_dir_sd = round(avg_F_dir_sd, 6),
+          avg_F_hat    = round(avg_F_hat, 6),
+          
+          bias_dir    = round(bias_dir, 6),
+          bias_dir_sd = round(bias_dir_sd, 6),
+          bias_hat    = round(bias_hat, 6),
+          
+          mse_dir    = round(mse_dir, 6),
+          mse_dir_sd = round(mse_dir_sd, 6),
+          mse_hat    = round(mse_hat, 6),
+          
+          var_dir    = round(var_dir, 6),
+          var_dir_sd = round(var_dir_sd, 6),
+          var_hat    = round(var_hat, 6)
+        )
+        
+        write.csv(results,
+                  paste0("ISTKernel_n", n,
+                         "_SGamma3r2_CGamma2r", ratec,
+                         "_p", p1,
+                         "_rho", rho,
+                         "_baseS.csv"),
+                  row.names = FALSE
+        )
+        
+        ALL_RESULTS <- rbind(ALL_RESULTS, results)
+      }
+    }
+  }
+}
+
+# plot data includes 3 estimators: dir, dir_sd, hat
+plot_data_gamma_gamma <- rbind(
+  data.frame(ALL_RESULTS, estimator = "dir",
+             bias = ALL_RESULTS$bias_dir,
+             mse  = ALL_RESULTS$mse_dir,
+             var  = ALL_RESULTS$var_dir),
+  
+  data.frame(ALL_RESULTS, estimator = "dir_sd",
+             bias = ALL_RESULTS$bias_dir_sd,
+             mse  = ALL_RESULTS$mse_dir_sd,
+             var  = ALL_RESULTS$var_dir_sd),
+  
+  data.frame(ALL_RESULTS, estimator = "hat",
+             bias = ALL_RESULTS$bias_hat,
+             mse  = ALL_RESULTS$mse_hat,
+             var  = ALL_RESULTS$var_hat)
+)
+
+write.csv(plot_data_gamma_gamma,
+          "ISTKernel_ALL_plot_data_CGAMMA_SGAMMA_rho_n_baseS_withSD.csv",
+          row.names = FALSE)
+
+
+
+```
+
+
+
+
+
+
+
+
+```{r}
+
+
+plot_data_gamma_gamma$n <- factor(
+  plot_data_gamma_gamma$n,
+  levels = c(100, 500)
+)
+
+plot_data_gamma_gamma$rho <- factor(
+  plot_data_gamma_gamma$rho,
+  levels = c(-0.5, 0, 0.5),
+  labels = c("-0.5", "0", "0.5")
+)
+
+plot_data_gamma_gamma$p1 <- factor(
+  plot_data_gamma_gamma$p1,
+  levels = c(0.25, 0.5, 0.75)
+)
+
+plot_data_gamma_gamma$ratec <- factor(
+  plot_data_gamma_gamma$ratec,
+  levels = c(16, 8, 4, 2)
+)
+
+plot_data_gamma_gamma$estimator <- factor(
+  plot_data_gamma_gamma$estimator,
+  levels = c("dir", "dir_sd", "hat"),
+  labels = c("Direct (clean)", "Direct + SD (under)", "IST kernel")
+)
+
+LINE_W <- 1.1
+
+for (pp in levels(plot_data_gamma_gamma$p1)) {
+
+  pd <- subset(plot_data_gamma_gamma, p1 == pp)
+
+  # Bias
+  bias_plot <- ggplot(pd, aes(x = s, y = bias, color = estimator)) +
+    geom_line(linewidth = LINE_W) +
+    facet_grid(n + rho ~ ratec, scales = "free_y") +
+    theme_bw(base_size = 16) +
+    theme(
+      legend.position = "top",
+      plot.caption = element_text(hjust = 0.5, size = 13)
+    ) +
+    labs(
+      x = "s",
+      y = "Bias",
+      color = "",
+      caption = paste0(
+        "Bias results for the direct estimator, direct + SD estimator, and kernel IST estimator ",
+        "with S ~ Gamma(3,2), C ~ Gamma(2, ratec), and p1 = ", pp, "."
+      )
+    )
+
+  print(bias_plot)
+  ggsave(
+    paste0("IST_KERNEL_Bias_CGAMMA_SGAMMA_p1_", pp, "_rho_n.png"),
+    plot = bias_plot, width = 18, height = 10, dpi = 300
+  )
+
+  # Variance
+  var_plot <- ggplot(pd, aes(x = s, y = var, color = estimator)) +
+    geom_line(linewidth = LINE_W) +
+    facet_grid(n + rho ~ ratec, scales = "free_y") +
+    theme_bw(base_size = 16) +
+    theme(
+      legend.position = "top",
+      plot.caption = element_text(hjust = 0.5, size = 13)
+    ) +
+    labs(
+      x = "s",
+      y = "Variance",
+      color = "",
+      caption = paste0(
+        "Variance results for the direct estimator, direct + SD estimator, and kernel IST estimator ",
+        "with S ~ Gamma(3,2), C ~ Gamma(2, ratec), and p1 = ", pp, "."
+      )
+    )
+
+  print(var_plot)
+  ggsave(
+    paste0("IST_KERNEL_Variance_CGAMMA_SGAMMA_p1_", pp, "_rho_n.png"),
+    plot = var_plot, width = 18, height = 10, dpi = 300
+  )
+
+  # MSE
+  mse_plot <- ggplot(pd, aes(x = s, y = mse, color = estimator)) +
+    geom_line(linewidth = LINE_W) +
+    facet_grid(n + rho ~ ratec, scales = "free_y") +
+    theme_bw(base_size = 16) +
+    theme(
+      legend.position = "top",
+      plot.caption = element_text(hjust = 0.5, size = 13)
+    ) +
+    labs(
+      x = "s",
+      y = "MSE",
+      color = "",
+      caption = paste0(
+        "Mean squared error results for the direct estimator, direct + SD estimator, and kernel IST estimator ",
+        "with S ~ Gamma(3,2), C ~ Gamma(2, ratec), and p1 = ", pp, "."
+      )
+    )
+
+  print(mse_plot)
+  ggsave(
+    paste0("IST_KERNEL_MSE_CGAMMA_SGAMMA_p1_", pp, "_rho_n.png"),
+    plot = mse_plot, width = 18, height = 10, dpi = 300
+  )
+}
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# S = Normal ()
+# C = Beta(a,a)
+
+
+
+
+```{r}
+
+
+# values of p1 to test
+p_values <- c(0.25, 0.5, 0.75)
+
+# no of monte carlo samples
+m <- 500
+
+# sample sizes
+ns <- c(100, 500)
+
+s_grid <- seq(-4, 4, 0.1)
+k <- length(s_grid)
+
+# C ~ Beta(a,a)
+a_values <- c(20, 10, 3, 0.5)
+
+# rho levels
+rho_values <- c(-0.5, 0, 0.5)
+
+ALL_RESULTS <- data.frame()
+
+make_kernel_cdf <- function(x, h) {
+  force(x); force(h)
+  function(y) mean(pnorm((y - x) / h))
+}
+
+for (n in ns) {
+  for (p1 in p_values) {
+    for (a in a_values) {
+      for (rho in rho_values) {
+        F_hat_store    <- matrix(NA, nrow = m, ncol = k)
+        F_dir_store    <- matrix(NA, nrow = m, ncol = k)
+        F_dir_sd_store <- matrix(NA, nrow = m, ncol = k)
+        
+        for (i in 1:m) {
+          
+          Z <- mvrnorm(n = n, mu = c(0, 0),
+                       Sigma = matrix(c(1, rho, rho, 1), 2, 2))
+          
+          S <- Z[,1]
+          
+          U2 <- pnorm(Z[,2])
+          C  <- qbeta(U2, a, a)
+          
+          L <- rbinom(n, 1, p1)
+          Y <- ifelse(L == 0, C, S + C)
+          
+          dat  <- data.frame(S, C, L, Y)
+          dat0 <- subset(dat, L == 0)
+          dat1 <- subset(dat, L == 1)
+          
+          # direct CDF (clean)
+          F_S_dir <- sapply(s_grid, function(s) mean(S <= s))
+          
+          # direct CDF + social desirability (UNDER-reporting)
+          shift_amt <- 0.10 * sd(S)
+          F_S_dir_sd <- pmin(pmax(F_S_dir + shift_amt, 0), 1)
+          
+          # bandwidths
+          h1 <- bw.SJ(dat1$Y)
+          h0 <- bw.SJ(dat0$Y)
+          
+          # kernel-smoothed CDFs
+          F1_hat <- make_kernel_cdf(dat1$Y, h1)
+          F0_hat <- make_kernel_cdf(dat0$Y, h0)
+
+          # IST estimator
+          F_S_hat <- sapply(s_grid, function(s) {
+            inner_vals <- sapply(dat0$Y, function(Yi) {
+              F1_hat(s + Yi) - F0_hat(Yi)
+            })
+            min(max(mean(inner_vals) + 0.5, 0), 1)
+          })
+          
+          F_dir_store[i, ]    <- F_S_dir
+          F_dir_sd_store[i, ] <- F_S_dir_sd
+          F_hat_store[i, ]    <- F_S_hat
+        }
+        
+        # TRUE CDF for S
+        F_true <- pnorm(s_grid, mean = 0, sd = 1)
+        TRUE_mat <- matrix(F_true, m, k, byrow = TRUE)
+        
+        avg_F_dir    <- colMeans(F_dir_store)
+        avg_F_dir_sd <- colMeans(F_dir_sd_store)
+        avg_F_hat    <- colMeans(F_hat_store)
+        
+        bias_dir    <- colMeans(F_dir_store - TRUE_mat)
+        bias_dir_sd <- colMeans(F_dir_sd_store - TRUE_mat)
+        bias_hat    <- colMeans(F_hat_store - TRUE_mat)
+        
+        mse_dir    <- colMeans((F_dir_store - TRUE_mat)^2)
+        mse_dir_sd <- colMeans((F_dir_sd_store - TRUE_mat)^2)
+        mse_hat    <- colMeans((F_hat_store - TRUE_mat)^2)
+        
+        var_dir    <- apply(F_dir_store, 2, var)
+        var_dir_sd <- apply(F_dir_sd_store, 2, var)
+        var_hat    <- apply(F_hat_store, 2, var)
+        
+        results <- data.frame(
+          n = n,
+          p1 = p1,
+          a = a,
+          rho = rho,
+          s = s_grid,
+          
+          F_true = round(F_true, 6),
+          
+          avg_F_dir    = round(avg_F_dir, 6),
+          avg_F_dir_sd = round(avg_F_dir_sd, 6),
+          avg_F_hat    = round(avg_F_hat, 6),
+          
+          bias_dir    = round(bias_dir, 6),
+          bias_dir_sd = round(bias_dir_sd, 6),
+          bias_hat    = round(bias_hat, 6),
+          
+          mse_dir    = round(mse_dir, 6),
+          mse_dir_sd = round(mse_dir_sd, 6),
+          mse_hat    = round(mse_hat, 6),
+          
+          var_dir    = round(var_dir, 6),
+          var_dir_sd = round(var_dir_sd, 6),
+          var_hat    = round(var_hat, 6)
+        )
+        
+        write.csv(results,
+                  paste0("ISTKernel_n", n,
+                         "_Snorm_Cbeta_p", p1,
+                         "_a", a,
+                         "_rho", rho,
+                         "_baseS.csv"),
+                  row.names = FALSE
+        )
+        
+        ALL_RESULTS <- rbind(ALL_RESULTS, results)
+      }
+    }
+  }
+}
+
+# plot data includes 3 estimators: dir, dir_sd, hat
+plot_data_norm_beta <- rbind(
+  data.frame(ALL_RESULTS, estimator = "dir",
+             bias = ALL_RESULTS$bias_dir,
+             mse  = ALL_RESULTS$mse_dir,
+             var  = ALL_RESULTS$var_dir),
+  
+  data.frame(ALL_RESULTS, estimator = "dir_sd",
+             bias = ALL_RESULTS$bias_dir_sd,
+             mse  = ALL_RESULTS$mse_dir_sd,
+             var  = ALL_RESULTS$var_dir_sd),
+  
+  data.frame(ALL_RESULTS, estimator = "hat",
+             bias = ALL_RESULTS$bias_hat,
+             mse  = ALL_RESULTS$mse_hat,
+             var  = ALL_RESULTS$var_hat)
+)
+
+write.csv(plot_data_norm_beta,
+          "ISTKernel_ALL_plot_data_Snorm_Cbeta_rho_n_baseS_withSD.csv",
+          row.names = FALSE)
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+
+
+plot_data_norm_beta$n <- factor(
+  plot_data_norm_beta$n,
+  levels = c(100, 500)
+)
+
+plot_data_norm_beta$rho <- factor(
+  plot_data_norm_beta$rho,
+  levels = c(-0.5, 0, 0.5),
+  labels = c("-0.5", "0", "0.5")
+)
+
+plot_data_norm_beta$p1 <- factor(
+  plot_data_norm_beta$p1,
+  levels = c(0.25, 0.5, 0.75)
+)
+
+plot_data_norm_beta$a <- factor(
+  plot_data_norm_beta$a,
+  levels = c(20, 10, 3, 0.5)
+)
+
+plot_data_norm_beta$estimator <- factor(
+  plot_data_norm_beta$estimator,
+  levels = c("dir", "dir_sd", "hat"),
+  labels = c("Direct (clean)", "Direct + SD (under)", "IST kernel")
+)
+
+LINE_W <- 1.1
+
+for (pp in levels(plot_data_norm_beta$p1)) {
+
+  pd <- subset(plot_data_norm_beta, p1 == pp)
+
+  # Bias
+  bias_plot <- ggplot(pd, aes(x = s, y = bias, color = estimator)) +
+    geom_line(linewidth = LINE_W) +
+    facet_grid(n + rho ~ a, scales = "free_y") +
+    theme_bw(base_size = 16) +
+    theme(
+      legend.position = "top",
+      plot.caption = element_text(hjust = 0.5, size = 13)
+    ) +
+    labs(
+      x = "s",
+      y = "Bias",
+      color = "",
+      caption = paste0(
+        "Bias results for the direct estimator, direct + SD estimator, and kernel IST estimator ",
+        "with S ~ Normal(0,1), C ~ Beta(a,a), and p1 = ", pp, "."
+      )
+    )
+
+  print(bias_plot)
+  ggsave(
+    paste0("IST_KERNEL_Bias_Snorm_Cbeta_p1_", pp, "_rho_n.png"),
+    plot = bias_plot, width = 18, height = 10, dpi = 300
+  )
+
+  # Variance
+  var_plot <- ggplot(pd, aes(x = s, y = var, color = estimator)) +
+    geom_line(linewidth = LINE_W) +
+    facet_grid(n + rho ~ a, scales = "free_y") +
+    theme_bw(base_size = 16) +
+    theme(
+      legend.position = "top",
+      plot.caption = element_text(hjust = 0.5, size = 13)
+    ) +
+    labs(
+      x = "s",
+      y = "Variance",
+      color = "",
+      caption = paste0(
+        "Variance results for the direct estimator, direct + SD estimator, and kernel IST estimator ",
+        "with S ~ Normal(0,1), C ~ Beta(a,a), and p1 = ", pp, "."
+      )
+    )
+
+  print(var_plot)
+  ggsave(
+    paste0("IST_KERNEL_Variance_Snorm_Cbeta_p1_", pp, "_rho_n.png"),
+    plot = var_plot, width = 18, height = 10, dpi = 300
+  )
+
+  # MSE
+  mse_plot <- ggplot(pd, aes(x = s, y = mse, color = estimator)) +
+    geom_line(linewidth = LINE_W) +
+    facet_grid(n + rho ~ a, scales = "free_y") +
+    theme_bw(base_size = 16) +
+    theme(
+      legend.position = "top",
+      plot.caption = element_text(hjust = 0.5, size = 13)
+    ) +
+    labs(
+      x = "s",
+      y = "MSE",
+      color = "",
+      caption = paste0(
+        "Mean squared error results for the direct estimator, direct + SD estimator, and kernel IST estimator ",
+        "with S ~ Normal(0,1), C ~ Beta(a,a), and p1 = ", pp, "."
+      )
+    )
+
+  print(mse_plot)
+  ggsave(
+    paste0("IST_KERNEL_MSE_Snorm_Cbeta_p1_", pp, "_rho_n.png"),
+    plot = mse_plot, width = 18, height = 10, dpi = 300
+  )
+}
+
+
+
+
+
+```
+

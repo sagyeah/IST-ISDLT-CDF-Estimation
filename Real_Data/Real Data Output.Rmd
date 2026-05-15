@@ -1,0 +1,529 @@
+---
+title: "Real Data"
+output: html_document
+---
+
+
+```{r}
+
+
+library(haven)
+library(tidyverse)
+
+Kv14a <- read_sav("kv14a_EN_1.0p.sav")
+
+glimpse(Kv14a)
+head(Kv14a)
+
+```
+
+
+
+
+
+
+
+
+
+```{r}
+
+
+library(dplyr)
+
+sexual_partners_data <- Kv14a %>%
+  mutate(group = as.numeric(kv14a001)) %>%
+  transmute(
+    id = nomem_encr,
+    group,
+
+    
+# GROUP 1 
+# Long list:
+# Q 1: How many times did you visit a restaurant last year?
+# Q 2: How many different sexual partners have you had up to now?
+restaurant_plus_sex = ifelse(group == 1, kv14a003, NA),
+
+# Short list:
+# How many cultural events (e.g. movies, concerts, theater, readings) did you go to last year?
+cultural_events_short = ifelse(group == 1, kv14a005, NA),
+
+  
+# GROUP 2
+# Long list:
+# Q 1: How many cultural events (e.g. movies, concerts, theater, readings) did you go to last year?
+# Q 2: How many different sexual partners have you had up to now?
+cultural_plus_sex = ifelse(group == 2, kv14a007, NA),
+
+# Short list:
+# How many times did you visit a restaurant last year?
+restaurant_short = ifelse(group == 2, kv14a009, NA),
+
+   
+# CONTROL GROUP (DIRECT QUESTIONING)
+    
+# Sensitive question:
+# How many different sexual partners have you had up to now?
+sexual_partners_direct = ifelse(group == 3, kv14a012, NA),
+
+# Control item 1:
+# How many cultural events (e.g. movies, concerts, theater, readings) did you go to last year?
+cultural_events_direct = ifelse(group == 3, kv14a010, NA),
+
+# Control item 2:
+# How many times did you visit a restaurant last year?
+restaurant_visits_direct = ifelse(group == 3, kv14a011, NA)
+  )
+
+# View(sexual_partners_data)
+
+```
+
+
+
+
+
+```{r}
+
+# group 1
+
+# long list resturant + sexual partners
+# short list cultural events
+
+sex_g1 <- sexual_partners_data %>%
+  dplyr::filter(group == 1) %>%
+  dplyr::arrange(id) %>%
+  dplyr::select(id, restaurant_plus_sex, cultural_events_short) 
+
+
+# group 2 
+
+# long list cultural + sexual partners
+# short list restaurant visits
+
+sex_g2 <- sexual_partners_data %>%
+  dplyr::filter(group == 2) %>%
+  dplyr::arrange(id) %>%
+  dplyr::select(id, cultural_plus_sex, restaurant_short) 
+
+
+# group 3 
+
+# control sexual partners , cultural events , restaurant visits
+
+sex_ctrl <- sexual_partners_data %>%
+  dplyr::filter(group == 3) %>%
+  dplyr::arrange(id) %>%
+  dplyr::select(id, sexual_partners_direct, cultural_events_direct, restaurant_visits_direct)
+
+colSums(is.na(sex_g1))
+colSums(is.na(sex_g2))
+
+anyNA(sex_g1)
+anyNA(sex_g2)
+anyNA(sex_ctrl)
+```
+
+
+
+
+
+
+# discrete to continous using log
+
+```{r, warning=FALSE, message=FALSE}
+# group 1
+
+# long list resturant + sexual partners   S + C1
+# short list cultural events  C1
+sex_g1 <- sex_g1 %>%
+  mutate(restaurant_plus_sex_trans = log(restaurant_plus_sex + 1),
+         cultural_events_short_trans = log(cultural_events_short + 1)) %>%
+  na.omit()
+
+# group 2 
+
+# long list cultural + sexual partners   S + C2
+# short list restaurant visits    C2
+sex_g2 <- sex_g2 %>%
+  mutate(cultural_plus_sex_trans = log(cultural_plus_sex + 1),
+         restaurant_short_trans = log(restaurant_short + 1)) %>%
+  na.omit()
+
+# group 3 
+
+# control sexual partners , cultural events , restaurant visits
+sex_ctrl <- sex_ctrl %>%
+  mutate(sexual_partners_direct_trans = log(sexual_partners_direct + 1),
+         cultural_events_direct_trans = log(cultural_events_direct + 1),
+         restaurant_visits_direct_trans = log(restaurant_visits_direct + 1)) %>%
+  na.omit()
+
+
+colSums(is.na(sex_g1))
+colSums(is.na(sex_g2))
+  
+#View(sex_g1)
+#View(sex_g2)
+#View(sex_ctrl)
+
+anyNA(sex_ctrl)
+anyNA(sex_g1)
+anyNA(sex_g2)
+
+
+```
+
+
+
+
+
+
+
+
+
+```{r}
+
+# Y1_A: Group 1 long-list values   # S + C1
+# Y2_B: Group 2 short-list values  # C2
+ 
+Y1_A <- sex_g1$restaurant_plus_sex_trans  # S + C1
+Y2_B <- sex_g2$restaurant_short_trans    # C2
+
+# Y1_B: Group 1 short-list values   # C1
+# Y2_A: Group 2 long-list values     # S + C2
+
+Y1_B <- sex_g1$cultural_events_short_trans  # C1
+Y2_A <- sex_g2$cultural_plus_sex_trans      # S + C2
+
+# cdf for long list group S + C1 restaurant + sexual partners
+F1_Y1 <- function(y) mean(Y1_A <= y, na.rm = TRUE)
+
+# cdf for short list C2 restaurant visits
+F0_Y1 <- function(y) mean(Y2_B <= y, na.rm = TRUE)
+
+
+
+
+# cdf for long list S + C2  cultural events + sexual partners
+F1_Y2 <- function(y) mean(Y2_A <= y, na.rm = TRUE)
+
+# cdf for short list C1 cultural events
+F0_Y2 <- function(y) mean(Y1_B <= y, na.rm = TRUE)
+
+s_min <- min(sex_ctrl$sexual_partners_direct_trans, na.rm = TRUE)
+s_max <- max(sex_ctrl$sexual_partners_direct_trans, na.rm = TRUE)
+
+s_grid <- seq(s_min, s_max, 0.4)
+
+
+
+F_raw_1 <- sapply(s_grid, function(s) {
+  inner_vals <- sapply(Y2_B, function(Yi) F1_Y1(s + Yi) - F0_Y1(Yi))
+  mean(inner_vals) + 0.5
+})
+
+F_raw_2 <- sapply(s_grid, function(s) {
+  inner_vals <- sapply(Y1_B, function(Yi) F1_Y2(s + Yi) - F0_Y2(Yi))
+  mean(inner_vals) + 0.5
+})
+
+
+F_hat_isdlt <- pmin(pmax(0.5 * (F_raw_1 + F_raw_2), 0), 1)
+
+
+
+
+F_direct <- sapply(s_grid, function(s) 
+  mean(sex_ctrl$sexual_partners_direct_trans <= s, na.rm = TRUE)
+)
+
+sex_results <- data.frame(
+  s = s_grid,
+  F_direct = round(F_direct, 4),
+  F_isdlt = round(F_hat_isdlt, 4)
+)
+
+
+
+
+sex_results
+ write.csv(sex_results, "sexual_partners_direct_vs_isdlt_cdf.csv", row.names = FALSE)
+
+```
+
+
+
+
+
+
+
+
+```{r}
+library(ggplot2)
+
+# plot Direct vs ISDLT
+ggplot(sex_results, aes(x = s)) +
+  geom_line(aes(y = F_direct, color = "Direct"), linewidth = 1) +
+  geom_line(aes(y = F_isdlt, color = "ISDLT"), linewidth = 1) +
+  labs(
+    title = "Estimated CDFs of Sexual Partners Direct vs ISDLT",
+    x = "s",
+    y = expression(hat(F)(s)),
+    color = "Estimator"
+  ) +
+  theme_minimal()+
+  theme(legend.position = "top")
+
+
+ggsave("sexaul_partners_direct_vs_isdlt_cdf.png", width = 18, height = 10, dpi = 300)
+
+```
+
+
+
+
+
+```{r}
+
+
+
+pornography_data <- Kv14a %>%
+  mutate(group = as.numeric(kv14a001)) %>%
+  transmute(
+    id = nomem_encr,
+    group,
+
+  
+# GROUP 1 
+# Long list:
+# Question 1: How many days did your last holiday trip take?
+# Q 2: Please think of the last 14 days. On how many of these days have you been watching pornography
+
+holiday_plus_porn = ifelse(group == 1, kv14a002, NA),
+
+# Short list:
+# How many hours did you work last week?
+work_hours_short = ifelse(group == 1, kv14a004, NA),
+
+    
+# GROUP 2 
+# Long list:
+# Question 1: How many hours did you work last week?
+# Q 2: Please think of the last 14 days. On how many of these days have you been watching pornography
+   
+work_hours_plus_porn = ifelse(group == 2, kv14a006, NA),
+
+# Short list:
+# How many days did your last holiday trip take?
+holiday_days_short = ifelse(group == 2, kv14a008, NA),
+
+   
+# CONTROL GROUP 3 (DIRECT QUESTIONING)
+    
+# Sensitive question:
+# Please think of the last 14 days. On how many of these days have you been watching pornography
+    
+pornography_direct = ifelse(group == 3, kv14a015, NA),
+
+# Control item 1:
+# How many hours did you work last week?
+work_hours_direct = ifelse(group == 3, kv14a013, NA),
+
+# Control item 2:
+# How many days did your last holiday trip take?
+holiday_days_direct = ifelse(group == 3, kv14a014, NA)
+  )
+
+
+
+```
+
+
+
+```{r}
+
+# group 1
+
+# long list holiday + porn
+# short list work hours
+
+porno_g1 <- pornography_data %>%
+  dplyr::filter(group == 1) %>%
+  dplyr::arrange(id) %>%
+  dplyr::select(id, holiday_plus_porn, work_hours_short) 
+
+
+# group 2 
+
+# long list cultural + sexual partners
+# short list restaurant visits
+
+porno_g2 <- pornography_data %>%
+  dplyr::filter(group == 2) %>%
+  dplyr::arrange(id) %>%
+  dplyr::select(id, work_hours_plus_porn, holiday_days_short) 
+
+
+# group 3 
+
+# control sexual partners , cultural events , restaurant visits
+
+porno_ctrl <- pornography_data %>%
+  dplyr::filter(group == 3) %>%
+  dplyr::arrange(id) %>%
+  dplyr::select(id, pornography_direct, work_hours_direct, holiday_days_direct)
+
+colSums(is.na(porno_g1))
+colSums(is.na(porno_g2))
+
+anyNA(porno_g1)
+anyNA(porno_g2)
+anyNA(porno_ctrl)
+
+```
+
+
+
+
+# discrete to continous using log
+
+```{r, warning=FALSE, message=FALSE}
+# group 1
+
+# long list porn + holiday
+# short list work hours
+porno_g1 <- porno_g1 %>%
+  mutate(holiday_plus_porn_trans = log(holiday_plus_porn + 1),
+         work_hours_short_trans = log(work_hours_short + 1)) %>%
+  na.omit()
+
+# group 2 
+
+# long list porn + work hours
+# short list holidays
+porno_g2 <- porno_g2 %>%
+  mutate(work_hours_plus_porn_trans = log(work_hours_plus_porn + 1),
+         holiday_days_short_trans = log(holiday_days_short + 1)) %>%
+  na.omit()
+
+
+# group 3 
+
+# control sexual partners , cultural events , restaurant visits
+porno_ctrl <- porno_ctrl %>%
+  mutate(pornography_direct_trans = log(pornography_direct + 1),
+         work_hours_direct_trans = log(work_hours_direct + 1),
+         holiday_days_direct_trans = log(holiday_days_direct + 1)) %>%
+  na.omit()
+
+
+colSums(is.na(porno_g1))
+colSums(is.na(porno_g2))
+  
+#View(sex_g1)
+#View(sex_g2)
+#View(sex_ctrl)
+
+anyNA(sex_ctrl)
+anyNA(sex_g1)
+anyNA(sex_g2)
+
+
+```
+
+
+
+
+```{r}
+
+
+
+# Y1_A: Group 1 long-list values   S + C1
+# Y2_B: Group 2 short-list values   C2
+
+Y1_A <- porno_g1$holiday_plus_porn_trans  # S + C1
+Y2_B <- porno_g2$holiday_days_short_trans    # C2
+
+# Y1_B: Group 1 short-list values  C1
+# Y2_A: Group 2 long-list values   S + C2
+
+Y1_B <- porno_g1$work_hours_short_trans  # C1
+Y2_A <- porno_g2$work_hours_plus_porn_trans      # S + C2
+
+# cdf for long list group  S + C1 Porn + Holidays
+F1_Y1 <- function(y) mean(Y1_A <= y, na.rm = TRUE)
+
+# cdf for short list C2 Holidays
+F0_Y1 <- function(y) mean(Y2_B <= y, na.rm = TRUE)
+
+
+# cdf for long list S + C2 Work hours + Porn 
+F1_Y2 <- function(y) mean(Y2_A <= y, na.rm = TRUE)
+
+# cdf for short list C1 Work hours
+F0_Y2 <- function(y) mean(Y1_B <= y, na.rm = TRUE)
+
+s_min <- min(porno_ctrl$pornography_direct_trans, na.rm = TRUE)
+s_max <- max(porno_ctrl$pornography_direct_trans, na.rm = TRUE)
+
+s_grid <- seq(s_min, s_max, 0.3)
+
+
+
+F_raw_1 <- sapply(s_grid, function(s) {
+  inner_vals <- sapply(Y2_B, function(Yi) F1_Y1(s + Yi) - F0_Y1(Yi))
+  mean(inner_vals) + 0.5
+})
+
+F_raw_2 <- sapply(s_grid, function(s) {
+  inner_vals <- sapply(Y1_B, function(Yi) F1_Y2(s + Yi) - F0_Y2(Yi))
+  mean(inner_vals) + 0.5
+})
+
+
+F_hat_isdlt <- pmin(pmax(0.5 * (F_raw_1 + F_raw_2), 0), 1)
+
+
+
+
+F_direct <- sapply(s_grid, function(s) 
+  mean(porno_ctrl$pornography_direct_trans <= s, na.rm = TRUE)
+)
+
+porno_results <- data.frame(
+  s = s_grid,
+  F_direct_ = round(F_direct, 4),
+  F_isdlt_ = round(F_hat_isdlt, 4)
+)
+
+
+
+
+porno_results
+
+write.csv(porno_results, "pornograhy_consumption_direct_vs_isdlt_cdf.csv", row.names = FALSE)
+
+
+```
+
+
+
+```{r}
+
+# plot Direct vs ISDLT
+ggplot(porno_results, aes(x = s)) +
+  geom_line(aes(y = F_direct_, color = "Direct"), linewidth = 1) +
+  geom_line(aes(y = F_isdlt_, color = "ISDLT"), linewidth = 1) +
+  labs(
+    title = "Estimated CDFs of Pornograhy Consumption(Direct vs ISDLT",
+    x = "s",
+    y = expression(hat(F)(s)),
+    color = "Estimator"
+  ) +
+  theme_minimal()+
+  theme(legend.position = "top")
+
+ggsave("pornograhy_consumption_direct_vs_isdlt_cdf.png", width = 18, height = 10, dpi = 300)
+
+```
+
